@@ -464,11 +464,7 @@ class Processor:
                                 webhook.send(
                                     embed=picEmbed,
                                     )
-                    
-                    attachedPictures.clear() # clear pictures                        
-                    attachedVideo = "empty" # reset attachedVideo to "empty"
-                    attachedPictureType = "empty" # reset attachedPictureType to "empty"
-                    
+                                        
                 else:                    
                     if attachedPictureType == "photo" or attachedPictureType == "gif" or attachedPictureType == "video":
                         self.embed.set_image(url=attachedPictures[0]) # gifs/video are only allowed once per tweet, otherwise the first picture gets attached to the first embed
@@ -501,9 +497,9 @@ class Processor:
                                     embed=picEmbed,
                                     )
                     
-                    attachedPictures.clear() # clear pictures                        
-                    attachedVideo = "empty" # reset attachedVideo to "empty"
-                    attachedPictureType = "empty" # reset attachedPictureType to "empty"
+                attachedPictures.clear() # clear pictures                        
+                attachedVideo = "empty" # reset attachedVideo to "empty"
+                attachedPictureType = "empty" # reset attachedPictureType to "empty"
                     
             except discord.errors.NotFound as error:
                 print(
