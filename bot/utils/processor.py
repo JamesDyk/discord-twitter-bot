@@ -469,7 +469,6 @@ class Processor:
                     attachedVideo = "empty" # reset attachedVideo to "empty"
                     attachedPictureType = "empty" # reset attachedPictureType to "empty"
                     
-                    )
                 else:
                     webhook.send(
                         content=self.discord_config.get("custom_message", "").format(
