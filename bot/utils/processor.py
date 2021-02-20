@@ -469,12 +469,42 @@ class Processor:
                     attachedVideo = "empty" # reset attachedVideo to "empty"
                     attachedPictureType = "empty" # reset attachedPictureType to "empty"
                     
-                else:
+                else:                    
+                    if attachedPictureType == "photo" or attachedPictureType == "gif" or attachedPictureType == "video":
+                        self.embed.set_image(url=attachedPictures[0]) # gifs/video are only allowed once per tweet, otherwise the first picture gets attached to the first embed
+                    
                     webhook.send(
+                        embed=self.embed,
                         content=self.discord_config.get("custom_message", "").format(
                             user=self.user, text=self.text, url=self.url
-                        )
+                        ),
                     )
+                                
+                    # check if there are more than 1 different pictures. Sometimes the first or only picture is attached twice, don't ask me why
+                    if len(attachedPictures) > 1:
+                        if len(attachedPictures) == 2 and attachedPictures[0] == attachedPictures[1]: # two pictures attached, but they're both the same
+                            pass
+                        else:
+                            
+                            if attachedPictures[0] == attachedPictures[1]: # first picture attached twice
+                                start = 2
+                            else: # first picture attached once
+                                start = 1
+                                    
+                            for attachedPicture in attachedPictures[start:]:
+                                time.sleep(1) # this needs a second of sleep time between every message, otherwise they could come in the wrong order, cause they're all sent at once
+                                picEmbed = Embed(
+                                    colour=self.discord_config.get("Color", random.choice(COLORS)),
+                                    )
+                                picEmbed.set_image(url=attachedPicture),
+                                webhook.send(
+                                    embed=picEmbed,
+                                    )
+                    
+                    attachedPictures.clear() # clear pictures                        
+                    attachedVideo = "empty" # reset attachedVideo to "empty"
+                    attachedPictureType = "empty" # reset attachedPictureType to "empty"
+                    
             except discord.errors.NotFound as error:
                 print(
                     f"---------Error---------\n"
