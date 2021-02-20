@@ -442,6 +442,7 @@ class Processor:
                         content=self.discord_config.get("custom_message", "").format(
                             user=self.user, text=self.text, url=self.url
                         ),
+                    )
                                 
                     # check if there are more than 1 different pictures. Sometimes the first or only picture is attached twice, don't ask me why
                     if len(attachedPictures) > 1:
