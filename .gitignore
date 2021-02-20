@@ -147,3 +147,4 @@ $RECYCLE.BIN/
 experiment/
 bot/config.json
 bot/.env
+bot/config.yml
