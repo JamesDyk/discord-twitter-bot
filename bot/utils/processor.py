@@ -333,9 +333,14 @@ class Processor:
                         attachedPictures.append(media["media_url_https"]),
                         attachedPictureType = "photo"
                     elif media["type"] == "video":
-                        pass
+                        attachedPictures.append(media["media_url_https"]),
+                        attachedVideo = (media["expanded_url"])  
+                        attachedPictureType = "video"
                     elif media["type"] == "animated_gif":
-                        pass
+                        attachedPictures.append(media["media_url_https"]),
+                        attachedVideo = (media["expanded_url"])  
+                        attachedPictureType = "gif"
+
 
             if (
                 "extended_entities" in self.status_tweet["retweeted_status"]
@@ -343,7 +348,8 @@ class Processor:
             ):
                 for media in self.status_tweet["retweeted_status"]["extended_entities"]["media"]:
                     if media["type"] == "photo":
-                        self.embed.set_image(url=media["media_url_https"])
+                        attachedPictures.append(media["media_url_https"]),
+                        attachedPictureType = "photo"
                     elif media["type"] == "video":
                         attachedPictures.append(media["media_url_https"]),
                         attachedVideo = (media["expanded_url"])  
@@ -362,14 +368,18 @@ class Processor:
                         attachedPictures.append(media["media_url_https"]),
                         attachedPictureType = "photo"
                     elif media["type"] == "video":
-                        pass
+                        attachedVideo = (media["expanded_url"])  
+                        attachedPictureType = "video"
                     elif media["type"] == "animated_gif":
-                        pass
+                        attachedPictures.append(media["media_url_https"]),
+                        attachedVideo = (media["expanded_url"])  
+                        attachedPictureType = "gif"
 
             if "media" in self.status_tweet["entities"]:
                 for media in self.status_tweet["entities"]["media"]:
                     if media["type"] == "photo":
-                        self.embed.set_image(url=media["media_url_https"])
+                        attachedPictures.append(media["media_url_https"]),
+                        attachedPictureType = "photo"
                     elif media["type"] == "video":
                         attachedPictures.append(media["media_url_https"]),
                         attachedVideo = (media["expanded_url"])  
