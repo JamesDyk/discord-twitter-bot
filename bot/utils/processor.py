@@ -58,23 +58,28 @@ attachedPictures = []
 attachedPictureType = "empty"
 attachedVideo = "empty"
 
-
-def worth_posting_location(location, coordinates):
+def worth_posting_location(location, coordinates, retweeted, include_retweet):
     location = [location[i : i + 4] for i in range(0, len(location), 4)]
 
     for box in location:
         for coordinate in coordinates:
             if box[0] < coordinate[0] < box[2] and box[1] < coordinate[1] < box[3]:
+                if not include_retweet and retweeted:
+                    return False
                 return True
     return False
 
 
-def worth_posting_track(track, hashtags, text):
+def worth_posting_track(track, hashtags, text, retweeted, include_retweet):
     for t in track:
         if t.startswith("#"):
             if t[1:] in map(lambda x: x["text"], hashtags):
+                if not include_retweet and retweeted:
+                    return False
                 return True
         elif t in text:
+            if not include_retweet and retweeted:
+                return False
             return True
     return False
 
@@ -106,11 +111,8 @@ def worth_posting_follow(
 
 def keyword_set_present(keyword_sets, text):
     for keyword_set in keyword_sets:
-        #print("used keyword: ", keyword_set) #dirtydebug
         keyword_present = [keyword.lower() in text.lower() for keyword in keyword_set]
         keyword_set_present = all(keyword_present)
-        #print("text:", text.lower()) #dirtydebug
-        #print("keyword present: ", keyword_set_present) #dirtydebug
         if keyword_set_present:
             return True
     return False
@@ -132,7 +134,10 @@ class Processor:
         self.status_tweet = status_tweet
         self.discord_config = discord_config
         self.text = ""
+        self.url = ""
+        self.user = ""
         self.embed = None
+        self.initialize()
 
     def worth_posting_location(self):
         if (
@@ -159,7 +164,10 @@ class Processor:
                 coordinates.append(c)
 
         return worth_posting_location(
-            location=self.discord_config.get("location", []), coordinates=coordinates
+            location=self.discord_config.get("location", []),
+            coordinates=coordinates,
+            retweeted=self.status_tweet["retweeted"] or "retweeted_status" in self.status_tweet,
+            include_retweet=self.discord_config.get("IncludeRetweet", True),
         )
 
     def worth_posting_track(self):
@@ -175,7 +183,11 @@ class Processor:
             )
 
         return worth_posting_track(
-            track=self.discord_config.get("track", []), hashtags=hashtags, text=self.text
+            track=self.discord_config.get("track", []),
+            hashtags=hashtags,
+            text=self.text,
+            retweeted=self.status_tweet["retweeted"] or "retweeted_status" in self.status_tweet,
+            include_retweet=self.discord_config.get("IncludeRetweet", True),
         )
 
     def worth_posting_follow(self):
@@ -189,7 +201,7 @@ class Processor:
             include_retweet=self.discord_config.get("IncludeRetweet", True),
         )
 
-    def get_text(self):
+    def initialize(self):
         if "retweeted_status" in self.status_tweet:
             if "extended_tweet" in self.status_tweet["retweeted_status"]:
                 self.text = self.status_tweet["retweeted_status"]["extended_tweet"]["full_text"]
@@ -204,14 +216,14 @@ class Processor:
         else:
             self.text = self.status_tweet["text"]
 
-        for url in self.status_tweet["entities"]["urls"]:
+        for url in self.status_tweet["entities"].get("urls", []):
             if url["expanded_url"] is None:
                 continue
             self.text = self.text.replace(
                 url["url"], "[%s](%s)" % (url["display_url"], url["expanded_url"])
             )
 
-        for userMention in self.status_tweet["entities"]["user_mentions"]:
+        for userMention in self.status_tweet["entities"].get("user_mentions", []):
             self.text = self.text.replace(
                 "@%s" % userMention["screen_name"],
                 "[@%s](https://twitter.com/%s)"
@@ -220,7 +232,7 @@ class Processor:
 
         if "extended_tweet" in self.status_tweet:
             for hashtag in sorted(
-                self.status_tweet["extended_tweet"]["entities"]["hashtags"],
+                self.status_tweet["extended_tweet"]["entities"].get("hashtags", []),
                 key=lambda k: k["text"],
                 reverse=True,
             ):
@@ -230,14 +242,19 @@ class Processor:
                 )
 
         for hashtag in sorted(
-            self.status_tweet["entities"]["hashtags"], key=lambda k: k["text"], reverse=True
+            self.status_tweet["entities"].get("hashtags", []),
+            key=lambda k: k["text"],
+            reverse=True,
         ):
             self.text = self.text.replace(
                 "#%s" % hashtag["text"],
                 "[#%s](https://twitter.com/hashtag/%s)" % (hashtag["text"], hashtag["text"]),
             )
         self.text = unescape(self.text)
-        return self.text
+        self.url = "https://twitter.com/{}/status/{}".format(
+            self.status_tweet["user"]["screen_name"], self.status_tweet["id_str"]
+        )
+        self.user = self.status_tweet["user"]["name"]
 
     def keyword_set_present(self):
         return keyword_set_present(self.discord_config.get("keyword_sets", [[""]]), self.text)
@@ -245,13 +262,52 @@ class Processor:
     def blackword_set_present(self):
         return blackword_set_present(self.discord_config.get("blackword_sets", [[""]]), self.text)
 
+    def attach_field(self):
+        if self.discord_config.get("IncludeQuote", True) and "quoted_status" in self.status_tweet:
+            if self.status_tweet["quoted_status"].get("text"):
+                text = self.status_tweet["quoted_status"]["text"]
+                for url in self.status_tweet["quoted_status"]["entities"].get("urls", []):
+                    if url["expanded_url"] is None:
+                        continue
+                    text = text.replace(
+                        url["url"], "[%s](%s)" % (url["display_url"], url["expanded_url"])
+                    )
+
+                for userMention in self.status_tweet["quoted_status"]["entities"].get(
+                    "user_mentions", []
+                ):
+                    text = text.replace(
+                        "@%s" % userMention["screen_name"],
+                        "[@%s](https://twitter.com/%s)"
+                        % (userMention["screen_name"], userMention["screen_name"]),
+                    )
+
+                for hashtag in sorted(
+                    self.status_tweet["quoted_status"]["entities"].get("hashtags", []),
+                    key=lambda k: k["text"],
+                    reverse=True,
+                ):
+                    text = text.replace(
+                        "#%s" % hashtag["text"],
+                        "[#%s](https://twitter.com/hashtag/%s)"
+                        % (hashtag["text"], hashtag["text"]),
+                    )
+
+                text = unescape(text)
+                self.embed.add_field(
+                    name=self.status_tweet["quoted_status"]["user"]["screen_name"], value=text
+                )
+
     def attach_media(self):
         
         global attachedPictureType
         global attachedPictures
         global attachedVideo
         
-        if "retweeted_status" in self.status_tweet:
+        if (
+            self.discord_config.get("IncludeAttachment", True)
+            and "retweeted_status" in self.status_tweet
+        ):
             if (
                 "extended_tweet" in self.status_tweet["retweeted_status"]
                 and "media" in self.status_tweet["retweeted_status"]["extended_tweet"]["entities"]
@@ -277,13 +333,9 @@ class Processor:
                         attachedPictures.append(media["media_url_https"]),
                         attachedPictureType = "photo"
                     elif media["type"] == "video":
-                        attachedPictures.append(media["media_url_https"]),
-                        attachedVideo = (media["expanded_url"])  
-                        attachedPictureType = "video"
+                        pass
                     elif media["type"] == "animated_gif":
-                        attachedPictures.append(media["media_url_https"]),
-                        attachedVideo = (media["expanded_url"])  
-                        attachedPictureType = "gif"
+                        pass
 
             if (
                 "extended_entities" in self.status_tweet["retweeted_status"]
@@ -291,8 +343,7 @@ class Processor:
             ):
                 for media in self.status_tweet["retweeted_status"]["extended_entities"]["media"]:
                     if media["type"] == "photo":
-                        attachedPictures.append(media["media_url_https"]),
-                        attachedPictureType = "photo"
+                        self.embed.set_image(url=media["media_url_https"])
                     elif media["type"] == "video":
                         attachedPictures.append(media["media_url_https"]),
                         attachedVideo = (media["expanded_url"])  
@@ -311,19 +362,14 @@ class Processor:
                         attachedPictures.append(media["media_url_https"]),
                         attachedPictureType = "photo"
                     elif media["type"] == "video":
-                        attachedPictures.append(media["media_url_https"]),
-                        attachedVideo = (media["expanded_url"])  
-                        attachedPictureType = "video"
+                        pass
                     elif media["type"] == "animated_gif":
-                        attachedPictures.append(media["media_url_https"]),
-                        attachedVideo = (media["expanded_url"])  
-                        attachedPictureType = "gif"
+                        pass
 
             if "media" in self.status_tweet["entities"]:
                 for media in self.status_tweet["entities"]["media"]:
                     if media["type"] == "photo":
-                        attachedPictures.append(media["media_url_https"]),
-                        attachedPictureType = "photo"
+                        self.embed.set_image(url=media["media_url_https"])
                     elif media["type"] == "video":
                         attachedPictures.append(media["media_url_https"]),
                         attachedVideo = (media["expanded_url"])  
@@ -343,16 +389,14 @@ class Processor:
                         attachedPictureType = "photo"
                     elif media["type"] == "video":
                         attachedPictures.append(media["media_url_https"]),
-                        attachedVideo = (media["expanded_url"])
+                        attachedVideo = (media["expanded_url"])  
                         attachedPictureType = "video"
                     elif media["type"] == "animated_gif":
                         attachedPictures.append(media["media_url_https"]),
-                        attachedVideo = (media["expanded_url"])
+                        attachedVideo = (media["expanded_url"])  
                         attachedPictureType = "gif"
 
     def create_embed(self):
-        global attachedPictureType
-        
         self.embed = Embed(
             colour=self.discord_config.get("Color", random.choice(COLORS)),
             url="https://twitter.com/{}/status/{}".format(
@@ -371,13 +415,11 @@ class Processor:
 #            url="https://twitter.com/" + self.status_tweet["user"]["screen_name"],
 #            icon_url=self.status_tweet["user"]["profile_image_url"],
 #        )
-            
         self.embed.set_footer(
             text="Tweet created on",
             icon_url="https://cdn1.iconfinder.com/data/icons/iconza-circle-social/64/697029-twitter-512.png",
         )
-        
-        
+
     def send_message(self, wh_url):
         match = re.search(WH_REGEX, wh_url)
         
@@ -390,71 +432,49 @@ class Processor:
                 int(match.group("id")), match.group("token"), adapter=RequestsWebhookAdapter()
             )
             try:
-                #dirty debug
-                #print("------------------------------")
-                #print("Variable check before sending:")
-                #print("------------------------------")
-                #print("pictures found: ", len(attachedPictures))
-                #print("pictureType set to: ", attachedPictureType)
-                #print("attachedVideo: ", attachedVideo)
-                #print("------------------------------")
-                
-                if attachedPictureType == "photo":
-                    self.embed.set_image(url=attachedPictures[0])
+                if self.discord_config.get("CreateEmbed", True):
                     
-                webhook.send( # send tweet
-                    embed=self.embed, content=self.discord_config.get("custom_message", None),
-                    )
-                
-                # single tweet with a gif or video, generally twitter only allows one of those for a tweet, so this should be enough to cover it
-                if attachedPictureType == "gif" or attachedPictureType == "video": 
-                    picEmbed = Embed(
-                        colour=self.discord_config.get("Color", random.choice(COLORS)),
-                        title="click here to view animated gif/video on Twitter",
-                        url=attachedVideo
-                        )
-                    picEmbed.set_image(url=attachedPictures[0]),
+                    if attachedPictureType == "photo" or attachedPictureType == "gif" or attachedPictureType == "video":
+                        self.embed.set_image(url=attachedPictures[0]) # gifs/video are only allowed once per tweet, otherwise the first picture gets attached to the first embed
+                    
                     webhook.send(
-                        embed=picEmbed,
-                        )
-                
-                # check if there are more than 1 different pictures
-                if len(attachedPictures) > 1:
-                    if len(attachedPictures) == 2 and attachedPictures[0] == attachedPictures[1]:
-                        #print("two pictures attached, but they're both the same")
-                        pass
-                    else:
-                        
-                        if attachedPictures[0] == attachedPictures[1]: 
-                            #print("first picture attached twice")
-                            start = 2
-                        else:
-                            #print("first picture attached once")
-                            start = 1
+                        embed=self.embed,
+                        content=self.discord_config.get("custom_message", "").format(
+                            user=self.user, text=self.text, url=self.url
+                        ),
                                 
-                        for attachedPicture in attachedPictures[start:]:
-                            time.sleep(1)
-                            picEmbed = Embed(
-                                colour=self.discord_config.get("Color", random.choice(COLORS)),
-                                )
-                            picEmbed.set_image(url=attachedPicture),
-                            webhook.send(
-                                embed=picEmbed,
-                                )
+                    # check if there are more than 1 different pictures. Sometimes the first or only picture is attached twice, don't ask me why
+                    if len(attachedPictures) > 1:
+                        if len(attachedPictures) == 2 and attachedPictures[0] == attachedPictures[1]: # two pictures attached, but they're both the same
+                            pass
+                        else:
+                            
+                            if attachedPictures[0] == attachedPictures[1]: # first picture attached twice
+                                start = 2
+                            else: # first picture attached once
+                                start = 1
+                                    
+                            for attachedPicture in attachedPictures[start:]:
+                                time.sleep(1) # this needs a second of sleep time between every message, otherwise they could come in the wrong order, cause they're all sent at once
+                                picEmbed = Embed(
+                                    colour=self.discord_config.get("Color", random.choice(COLORS)),
+                                    )
+                                picEmbed.set_image(url=attachedPicture),
+                                webhook.send(
+                                    embed=picEmbed,
+                                    )
                     
-                attachedPictures.clear() # clear pictures                        
-                attachedVideo = "empty" # reset attachedVideo to empty
-                attachedPictureType = "empty" # reset attachedPictureType to empty
-                
-                #dirtydebug
-                #print("------------------------------")
-                #print("Variable check after sending:")
-                #print("------------------------------")
-                #print("pictures found: ", len(attachedPictures))
-                #print("pictureType set to: ", attachedPictureType)
-                #print("attachedVideo: ", attachedVideo)
-                #print("------------------------------")
+                    attachedPictures.clear() # clear pictures                        
+                    attachedVideo = "empty" # reset attachedVideo to "empty"
+                    attachedPictureType = "empty" # reset attachedPictureType to "empty"
                     
+                    )
+                else:
+                    webhook.send(
+                        content=self.discord_config.get("custom_message", "").format(
+                            user=self.user, text=self.text, url=self.url
+                        )
+                    )
             except discord.errors.NotFound as error:
                 print(
                     f"---------Error---------\n"
@@ -500,4 +520,3 @@ if __name__ == "__main__":
     p = Processor({}, {"keyword_sets": [[""]]})
     p.text = "Hello World!"
     print(p.keyword_set_present())
-
