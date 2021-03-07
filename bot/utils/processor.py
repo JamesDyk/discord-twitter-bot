@@ -368,6 +368,7 @@ class Processor:
                         attachedPictures.append(media["media_url_https"]),
                         attachedPictureType = "photo"
                     elif media["type"] == "video":
+                        attachedPictures.append(media["media_url_https"]),
                         attachedVideo = (media["expanded_url"])  
                         attachedPictureType = "video"
                     elif media["type"] == "animated_gif":
@@ -460,7 +461,7 @@ class Processor:
                             pass
                         else:
                             
-                            if attachedPictures[0] == attachedPictures[1]: # first picture attached twice
+                            if attachedPictures[0] == attachedPictures[1]: # first picture attached twice, skip second picture
                                 start = 2
                             else: # first picture attached once
                                 start = 1
